@@ -68,6 +68,8 @@ import {
 
 // Layout bridge
 import { toFlowBlocks } from '@eigenpal/docx-core/layout-bridge';
+import type { WrapType } from '@eigenpal/docx-core/docx/wrapTypes';
+import { hitTestImage, captureInlinePositionEmu } from '@eigenpal/docx-core/layout-painter';
 import {
   measureParagraph,
   resetCanvasContext,
@@ -279,8 +281,24 @@ export interface PagedEditorProps {
     tooltip?: string;
     anchorRect: DOMRect;
   }) => void;
-  /** Callback when user right-clicks on the pages (for context menu). */
-  onContextMenu?: (data: { x: number; y: number; hasSelection: boolean }) => void;
+  /** Callback when user right-clicks on the pages (for context menu).
+   *  When the right-click target resolves to an image node, `image` carries
+   *  the image's PM doc position, current wrap type, current cssFloat (lets
+   *  the menu disambiguate Square Left vs Square Right), and — for inline
+   *  images only — the rendered EMU offset of the image relative to the
+   *  page content origin. The host promotes that offset into the new
+   *  anchor's `wp:positionH/V` if the user converts inline → anchor. */
+  onContextMenu?: (data: {
+    x: number;
+    y: number;
+    hasSelection: boolean;
+    image?: {
+      pos: number;
+      wrapType: WrapType;
+      cssFloat?: 'left' | 'right' | 'none' | null;
+      inlinePositionEmu?: { horizontalEmu: number; verticalEmu: number };
+    } | null;
+  }) => void;
   /** Callback with pre-computed Y positions for comment/tracked-change anchors (for sidebar positioning without DOM queries). */
   onAnchorPositionsChange?: (positions: Map<string, number>) => void;
   /**
@@ -3415,6 +3433,11 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
 
     /**
      * Handle right-click on pages — set/preserve selection and show context menu.
+     *
+     * If the right-click target resolves to an image node (any of the three
+     * rendering paths — page-floating layer, block image container, or inline
+     * `<img>`), look up the underlying PM image node and pass its position +
+     * current wrap type to the host so an image-specific menu can take over.
      */
     const handlePagesContextMenu = useCallback(
       (e: React.MouseEvent) => {
@@ -3424,6 +3447,52 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
 
         const view = hiddenPMRef.current?.getView();
         if (!view) return;
+
+        // Try to detect an image right-click first.
+        //
+        // Two paths route here. The cheap one — clicking on a non-selected
+        // image — surfaces the image element as `e.target` and we walk up.
+        // The harder one is when PM already has a NodeSelection on the image
+        // (because the user clicked it once first): PM mounts a selection
+        // overlay that swallows pointer events, so `e.target` lands on the
+        // overlay, not on `.layout-page-floating-image` etc. Fall through to
+        // the current selection in that case.
+        type ImageInfo = {
+          pos: number;
+          wrapType: WrapType;
+          cssFloat?: 'left' | 'right' | 'none' | null;
+          inlinePositionEmu?: { horizontalEmu: number; verticalEmu: number };
+        };
+        const readImageNodeAt = (pos: number): ImageInfo | null => {
+          const node = view.state.doc.nodeAt(pos);
+          if (!node || node.type.name !== 'image') return null;
+          const wrapType = (node.attrs.wrapType as WrapType | undefined) ?? 'inline';
+          const cssFloat = node.attrs.cssFloat as ImageInfo['cssFloat'];
+          return { pos, wrapType, cssFloat };
+        };
+
+        let imageInfo: ImageInfo | null = null;
+        const hit = hitTestImage(e.target);
+        if (hit) {
+          imageInfo = readImageNodeAt(hit.pos);
+          if (imageInfo) {
+            imageInfo.inlinePositionEmu = captureInlinePositionEmu(hit.imageEl, zoom);
+          }
+        }
+        if (!imageInfo) {
+          const sel = view.state.selection;
+          if (sel instanceof NodeSelection && sel.node.type.name === 'image') {
+            imageInfo = readImageNodeAt(sel.from);
+            if (imageInfo) {
+              const inlineEl = pagesContainerRef.current?.querySelector(
+                `.layout-run-image[data-pm-start="${sel.from}"]`
+              ) as HTMLElement | null;
+              if (inlineEl) {
+                imageInfo.inlinePositionEmu = captureInlinePositionEmu(inlineEl, zoom);
+              }
+            }
+          }
+        }
 
         const { from, to } = view.state.selection;
         const pmPos = getPositionFromMouse(e.clientX, e.clientY);
@@ -3442,9 +3511,19 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
           ? updatedState.selection.from !== updatedState.selection.to
           : false;
 
-        onContextMenu({ x: e.clientX, y: e.clientY, hasSelection });
+        onContextMenu({
+          x: e.clientX,
+          y: e.clientY,
+          hasSelection,
+          image: imageInfo,
+        });
       },
-      [onContextMenu, getPositionFromMouse]
+      // `zoom` is read inside `captureInlinePositionEmu` to convert post-
+      // transform px deltas back to authored space. Listing it explicitly
+      // even though `getPositionFromMouse` already invalidates on zoom — the
+      // dep is direct, not transitive, so it survives a refactor of the
+      // sibling closure.
+      [onContextMenu, getPositionFromMouse, zoom]
     );
 
     /**
@@ -3973,6 +4052,7 @@ const PagedEditorComponent = forwardRef<PagedEditorRef, PagedEditorProps>(
             onDragMove={handleImageDragMove}
             onDragStart={handleImageDragStart}
             onDragEnd={handleImageDragEnd}
+            onContextMenu={handlePagesContextMenu}
           />
 
           {/* Table quick action insert button */}

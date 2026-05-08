@@ -406,12 +406,17 @@ function renderInlineImageRun(run: ImageRun, doc: Document): HTMLElement {
     img.style.transform = run.transform;
   }
 
-  // Use middle alignment — when the image's containing line was sized
-  // with extra leading on both sides (imageH + 2*descent), middle puts
-  // the image roughly at line center with visible padding above and
-  // below, matching Word's render. (Pure baseline/top would land flush
-  // with the line edge; middle is also Tailwind's preflight default so
-  // we set it explicitly for documentation.)
+  // Tailwind preflight resets `<img>` to `display: block`, which breaks the
+  // inline run flow: an inline image preceded and followed by text would push
+  // the trailing text to a new visual row inside the line div, overflowing the
+  // measured line height into the next paragraph. `inline-block` keeps the
+  // image inside the line's flow while preserving its explicit width/height.
+  img.style.display = 'inline-block';
+
+  // Middle alignment — when the line's height was sized with extra leading on
+  // both sides (imageH + 2*descent), middle puts the image roughly at line
+  // center with visible padding above and below, matching Word's render. (Pure
+  // baseline/top would land flush with the line edge.)
   img.style.verticalAlign = 'middle';
 
   applyPmPositions(img, run.pmStart, run.pmEnd);
@@ -727,9 +732,28 @@ export function renderLine(
   // either flush with one edge or overflowing — the line's ascent/descent
   // can't be reconciled with parent-font baseline rules well enough to
   // center automatically. Flex centering is unambiguous.
+  //
+  // The flex container also needs `justify-content` to honor the image's
+  // horizontal alignment. Two paths feed it:
+  //   1. `pPr/jc` on the containing paragraph — we get this via `alignment`.
+  //   2. The image's own `wp:positionH` `wp:align` (e.g. demo.docx centers
+  //      its topAndBottom green dot via `relativeFrom="page" align="center"`
+  //      and leaves the paragraph alignment untouched).
+  // Image-level alignment wins when present — it's the more specific signal
+  // from OOXML, and it's the only signal Word writes for that kind of
+  // anchored layout.
   if (runsForLine.length === 1 && isImageRun(runsForLine[0])) {
+    const imageRun = runsForLine[0] as ImageRun;
+    const imageAlign = imageRun.position?.horizontal?.align;
+    const effectiveAlign = imageAlign ?? alignment;
     lineEl.style.display = 'flex';
     lineEl.style.alignItems = 'center';
+    lineEl.style.justifyContent =
+      effectiveAlign === 'center'
+        ? 'center'
+        : effectiveAlign === 'right'
+          ? 'flex-end'
+          : 'flex-start';
   }
 
   // Handle empty lines

@@ -64,6 +64,18 @@ export {
 export type { RenderPagesUpdateKind };
 export type { HeaderFooterContent, RenderPageOptions, FootnoteRenderItem } from './renderPage';
 
+// Framework-agnostic image layout helpers shared by React + Vue adapters.
+export {
+  LAYOUT_IMAGE_CLASSES,
+  hitTestImage,
+  captureInlinePositionEmu,
+  deriveLayoutChoice,
+  IMAGE_LAYOUT_OPTIONS,
+  isImageLayoutOptionEnabled,
+  toolbarValueToLayoutTarget,
+} from './imageLayout';
+export type { ImageHitTestResult, ImageLayoutIconHint, ImageLayoutOptionDef } from './imageLayout';
+
 /**
  * Block lookup entry for painter
  */
