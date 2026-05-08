@@ -337,6 +337,29 @@ function extractRunFormatting(marks: readonly Mark[], theme?: Theme | null): Run
         formatting.textOutline = true;
         break;
 
+      case 'hidden':
+        formatting.hidden = true;
+        break;
+
+      case 'rtl':
+        formatting.rtl = true;
+        break;
+
+      case 'textEffect': {
+        const effect = mark.attrs.effect as string | undefined;
+        if (
+          effect === 'blinkBackground' ||
+          effect === 'lights' ||
+          effect === 'antsBlack' ||
+          effect === 'antsRed' ||
+          effect === 'shimmer' ||
+          effect === 'sparkle'
+        ) {
+          formatting.textEffect = effect;
+        }
+        break;
+      }
+
       case 'emphasisMark': {
         // CJK emphasis marks (§17.3.2.12). The PM mark stores the variant
         // type as `attrs.type`; pass it through so the painter can look up
@@ -508,6 +531,11 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
         distRight: attrs.distRight as number | undefined,
         // Preserve position for page-level floating image positioning
         position: attrs.position as ImageRun['position'] | undefined,
+        cropTop: attrs.cropTop as number | undefined,
+        cropRight: attrs.cropRight as number | undefined,
+        cropBottom: attrs.cropBottom as number | undefined,
+        cropLeft: attrs.cropLeft as number | undefined,
+        opacity: attrs.opacity as number | undefined,
         pmStart: childPos,
         pmEnd: childPos + child.nodeSize,
       };
@@ -599,6 +627,11 @@ function paragraphToRuns(node: PMNode, startPos: number, _options: ToFlowBlocksO
             distLeft: attrs.distLeft as number | undefined,
             distRight: attrs.distRight as number | undefined,
             position: attrs.position as ImageRun['position'] | undefined,
+            cropTop: attrs.cropTop as number | undefined,
+            cropRight: attrs.cropRight as number | undefined,
+            cropBottom: attrs.cropBottom as number | undefined,
+            cropLeft: attrs.cropLeft as number | undefined,
+            opacity: attrs.opacity as number | undefined,
             pmStart: sdtChildPos,
             pmEnd: sdtChildPos + sdtChild.nodeSize,
           };
@@ -1105,6 +1138,7 @@ function convertTableCell(
     background: attrs.backgroundColor ? `#${attrs.backgroundColor}` : undefined,
     borders: extractCellBorders(attrs as Record<string, unknown>, options.theme),
     padding,
+    noWrap: (attrs.noWrap as boolean | undefined) || undefined,
   };
 }
 

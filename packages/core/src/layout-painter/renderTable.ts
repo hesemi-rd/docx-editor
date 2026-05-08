@@ -499,6 +499,14 @@ function renderTableCell(
     cellEl.style.backgroundColor = cell.background;
   }
 
+  // `w:noWrap` (§17.4.30): forbid soft-wrapping inside the cell. We apply
+  // it on the cell box so descendants pick it up by inheritance — paragraph
+  // lines remain a single visual line that may grow the cell's effective
+  // content width past its measured size.
+  if (cell.noWrap) {
+    cellEl.style.whiteSpace = 'nowrap';
+  }
+
   // Vertical alignment
   if (cell.verticalAlign) {
     cellEl.style.display = 'flex';

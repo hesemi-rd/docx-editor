@@ -22,6 +22,7 @@ import type {
   TabStop,
 } from '../layout-engine/types';
 import { isFloatingImageRun, type RenderContext } from './renderPage';
+import { applyImageVisualAttrs, hasImageVisualAttrs } from './renderImage';
 import {
   calculateTabWidth,
   type TabContext,
@@ -278,6 +279,35 @@ function applyRunStyles(
     element.style.verticalAlign = 'sub';
     element.style.fontSize = '0.75em';
   }
+
+  // Hidden run (OOXML w:vanish, §17.3.2.41). In Word's print/normal view
+  // hidden text is suppressed entirely, but in *editing* view (which we
+  // always are) Word still draws it dimmed with a dotted underline so the
+  // author can navigate to and edit it. Mirror that: keep the run in flow
+  // and selectable — `display: none` would orphan PM positions and break
+  // cursor movement across hidden ranges. A `docx-hidden` class hook lets
+  // host CSS swap to print-style suppression when a future view-mode toggle
+  // ships.
+  if (run.hidden) {
+    element.classList.add('docx-hidden');
+    element.style.opacity = '0.4';
+    element.style.textDecoration = 'underline dotted';
+  }
+
+  // Per-run RTL (OOXML w:rtl): flip just this run, independent of the
+  // paragraph's bidi direction. The browser's bidi algorithm picks up `dir`
+  // automatically from the attribute.
+  if (run.rtl) {
+    element.setAttribute('dir', 'rtl');
+  }
+
+  // Legacy w:effect animations: surface as a class hook so the host CSS
+  // can opt in. We avoid applying actual animations because Word's effects
+  // are obtrusive and most modern docs treat them as legacy decoration.
+  if (run.textEffect) {
+    element.classList.add('docx-text-effect', `docx-text-effect-${run.textEffect}`);
+    element.dataset.effect = run.textEffect;
+  }
 }
 
 /**
@@ -384,6 +414,32 @@ function getLeaderChar(leader: string): string | null {
 }
 
 /**
+ * Parse the rotation angle (in degrees, normalized to [0, 360)) from a
+ * `transform` string like `"rotate(90deg) scaleX(-1)"`. Returns 0 when no
+ * `rotate()` term is present.
+ */
+function rotationDegrees(transform: string | undefined): number {
+  if (!transform) return 0;
+  const m = transform.match(/rotate\(([-\d.]+)deg\)/);
+  if (!m) return 0;
+  return ((parseFloat(m[1]) % 360) + 360) % 360;
+}
+
+/**
+ * Axis-aligned bounding box of a rectangle of size `w × h` rotated by
+ * `deg` degrees. For multiples of 90° the dims swap (or stay) without
+ * floating-point drift; arbitrary angles use the standard formula.
+ */
+function rotatedBoundingBox(w: number, h: number, deg: number): { w: number; h: number } {
+  if (deg === 0 || deg === 180) return { w, h };
+  if (deg === 90 || deg === 270) return { w: h, h: w };
+  const rad = (deg * Math.PI) / 180;
+  const sinA = Math.abs(Math.sin(rad));
+  const cosA = Math.abs(Math.cos(rad));
+  return { w: w * cosA + h * sinA, h: w * sinA + h * cosA };
+}
+
+/**
  * Render an inline image run (flows with text)
  */
 function renderInlineImageRun(run: ImageRun, doc: Document): HTMLElement {
@@ -404,6 +460,34 @@ function renderInlineImageRun(run: ImageRun, doc: Document): HTMLElement {
   }
   if (run.transform) {
     img.style.transform = run.transform;
+    // Word rotates around the picture's geometric center; the CSS default
+    // happens to match, but be explicit so future transforms can't drift.
+    img.style.transformOrigin = 'center center';
+  }
+  if (hasImageVisualAttrs(run)) applyImageVisualAttrs(img, run);
+
+  const deg = rotationDegrees(run.transform);
+  if (deg !== 0) {
+    // Rotated content extends past `run.width × run.height`, so the inline
+    // line box would otherwise reserve too little space and adjacent text
+    // would overlap the picture. Wrap the rotated img in a span sized to
+    // its axis-aligned bounding box and position the img absolutely at the
+    // wrapper's centre so the rotation pivots correctly. This matches
+    // Word's behaviour where `wp:extent` reflects the post-rotation bbox
+    // and the picture content rotates inside it.
+    const bbox = rotatedBoundingBox(run.width, run.height, deg);
+    const wrapper = doc.createElement('span');
+    wrapper.style.display = 'inline-block';
+    wrapper.style.position = 'relative';
+    wrapper.style.width = `${bbox.w}px`;
+    wrapper.style.height = `${bbox.h}px`;
+    wrapper.style.verticalAlign = 'middle';
+    img.style.position = 'absolute';
+    img.style.left = `${(bbox.w - run.width) / 2}px`;
+    img.style.top = `${(bbox.h - run.height) / 2}px`;
+    applyPmPositions(wrapper, run.pmStart, run.pmEnd);
+    wrapper.appendChild(img);
+    return wrapper;
   }
 
   // Tailwind preflight resets `<img>` to `display: block`, which breaks the
@@ -449,6 +533,24 @@ function renderBlockImage(run: ImageRun, doc: Document): HTMLElement {
   }
   if (run.transform) {
     img.style.transform = run.transform;
+    img.style.transformOrigin = 'center center';
+  }
+  if (hasImageVisualAttrs(run)) applyImageVisualAttrs(img, run);
+
+  // Reserve the rotated bbox height so the rotated image doesn't bleed into
+  // adjacent paragraphs. The container height matches the bbox; the inner
+  // img rotates around its own centre, which now lands inside the wrapper.
+  const deg = rotationDegrees(run.transform);
+  if (deg !== 0) {
+    const bbox = rotatedBoundingBox(run.width, run.height, deg);
+    container.style.height = `${bbox.h}px`;
+    container.style.position = 'relative';
+    img.style.position = 'absolute';
+    img.style.left = '50%';
+    img.style.top = '50%';
+    img.style.marginLeft = `${-run.width / 2}px`;
+    img.style.marginRight = '0';
+    img.style.marginTop = `${-run.height / 2}px`;
   }
 
   applyPmPositions(container, run.pmStart, run.pmEnd);

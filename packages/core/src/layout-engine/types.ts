@@ -64,6 +64,19 @@ export type RunFormatting = {
    * with a position and style; the painter handles the variant lookup.
    */
   emphasisMark?: 'dot' | 'comma' | 'circle' | 'underDot';
+  /** Hidden run (OOXML w:vanish, §17.3.2.41). Painter skips the run. */
+  hidden?: boolean;
+  /**
+   * Per-run right-to-left direction (OOXML w:rtl, §17.3.2.30). Independent
+   * from the paragraph's bidi flag — a single run may flip direction within
+   * an LTR paragraph.
+   */
+  rtl?: boolean;
+  /**
+   * Legacy text-effect animation (OOXML w:effect, §17.3.2.11). The painter
+   * surfaces it as a class hook so host CSS can opt in to animations.
+   */
+  textEffect?: 'blinkBackground' | 'lights' | 'antsBlack' | 'antsRed' | 'shimmer' | 'sparkle';
   /** Hyperlink info if this run is a link */
   hyperlink?: { href: string; tooltip?: string };
   /** Footnote reference ID (if this run contains a footnote reference) */
@@ -156,6 +169,13 @@ export type ImageRun = {
   distBottom?: number;
   distLeft?: number;
   distRight?: number;
+  /** wp:srcRect crop fractions in [0, 1]; emit as CSS clip-path inset. */
+  cropTop?: number;
+  cropRight?: number;
+  cropBottom?: number;
+  cropLeft?: number;
+  /** a:alphaModFix → CSS opacity in [0, 1]. */
+  opacity?: number;
   pmStart?: number;
   pmEnd?: number;
 };
@@ -344,6 +364,12 @@ export type TableCell = {
   borders?: CellBorders;
   /** Per-cell padding in pixels (from w:tcMar or table-level w:tblCellMar) */
   padding?: { top: number; right: number; bottom: number; left: number };
+  /**
+   * `w:noWrap`: when true, the cell forbids text wrapping inside it. The
+   * painter renders this as `white-space: nowrap` on the content container
+   * — content stays on one line and the cell expands horizontally.
+   */
+  noWrap?: boolean;
 };
 
 /**
