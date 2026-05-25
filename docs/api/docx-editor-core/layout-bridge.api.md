@@ -393,7 +393,13 @@ export function mapFootnotesToPages(pages: Page[], footnoteRefs: Array<{
 export const MAX_FOOTNOTE_LAYOUT_PASSES = 6;
 
 // @public
+export type MeasureBlockFn = (block: FlowBlock, contentWidth: number, floatingZones?: FloatingImageZone[], cumulativeY?: number) => Measure;
+
+// @public
 export type MeasureBlocksFn = (blocks: FlowBlock[], contentWidth: number) => Measure[];
+
+// @public
+export function measureBlocksWithFloats(blocks: FlowBlock[], contentWidth: number | number[], measureBlock: MeasureBlockFn): Measure[];
 
 // @public
 export function measureParagraph(block: ParagraphBlock, maxWidth: number, options?: MeasureParagraphOptions): ParagraphMeasure;

@@ -145,6 +145,12 @@ export function halfPtToPx(halfPt: number): number;
 export function hashParagraphBlock(block: ParagraphBlock): string;
 
 // @public
+export type MeasureBlockFn = (block: FlowBlock, contentWidth: number, floatingZones?: FloatingImageZone[], cumulativeY?: number) => Measure;
+
+// @public
+export function measureBlocksWithFloats(blocks: FlowBlock[], contentWidth: number | number[], measureBlock: MeasureBlockFn): Measure[];
+
+// @public
 export function measureParagraph(block: ParagraphBlock, maxWidth: number, options?: MeasureParagraphOptions): ParagraphMeasure;
 
 // @public
