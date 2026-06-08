@@ -449,7 +449,19 @@ export function renderHeaderFooterContent(
         layout
       );
       containerEl.appendChild(fragEl);
-      cursorY += measure.height;
+      // Floating text boxes (square/tight/through/behind/inFront wrap) are
+      // positioned and do NOT advance the flow — surrounding header content
+      // flows as if the box weren't there, mirroring floating tables above and
+      // matching Word: a centered banner sits beside the left/right header text
+      // instead of pushing it down. This also keeps a tall page-anchored
+      // letterhead from shoving the in-flow content past the header band
+      // (#705). Advancing for a float made the in-flow content overflow the
+      // band (which excludes floats from `flowHeight`) and overlap the body.
+      // Inline and topAndBottom boxes still stack on the cursor (they reserve
+      // in-flow vertical space).
+      if (block.displayMode !== 'float') {
+        cursorY += measure.height;
+      }
     } else if (
       block.kind === 'sectionBreak' ||
       block.kind === 'pageBreak' ||

@@ -255,7 +255,12 @@ export function calculateHeaderFooterVisualBounds(
   metrics: HeaderFooterMetrics
 ): { visualTop: number; visualBottom: number } {
   let visualTop = 0;
-  let visualBottom = flowHeight;
+  // Accumulate the real extent from the blocks below. Do NOT seed with the
+  // caller's `flowHeight` arg (it is the float-inclusive `totalHeight`): when a
+  // floating box doesn't advance the cursor, seeding with the stacked total
+  // would keep `visualBottom` artificially tall and the header container/hover
+  // highlight would read taller than the painted content (#705/#729).
+  let visualBottom = 0;
   let cursorY = 0;
 
   for (let i = 0; i < blocks.length; i++) {
@@ -291,7 +296,14 @@ export function calculateHeaderFooterVisualBounds(
       const blockBottomY = cursorY + measure.height;
       visualTop = Math.min(visualTop, cursorY);
       visualBottom = Math.max(visualBottom, blockBottomY);
-      cursorY = blockBottomY;
+      // A floating text box is positioned, not in-flow: it extends the visual
+      // bounds (so the band/container stays tall enough to show it) but does
+      // NOT advance the cursor, mirroring the painter (renderHeaderFooterContent)
+      // and floating tables. Otherwise the header container outgrows its actual
+      // content and the hover highlight reads taller than the header (#705/#729).
+      if (block.displayMode !== 'float') {
+        cursorY = blockBottomY;
+      }
     }
   }
 
@@ -374,8 +386,11 @@ export function convertHeaderFooterPmDocToContent(
     totalHeight += h;
     if (contributesToHeaderFooterFlowHeight(blocksForMeasure[i])) flowHeight += h;
   }
+  // Use `blocksForMeasure` (the normalized list the `measures` were computed
+  // from), NOT the raw `blocks` — otherwise block[i] and measure[i] can desync
+  // and per-block flags like `displayMode` are read off the wrong block.
   const { visualTop, visualBottom } = calculateHeaderFooterVisualBounds(
-    blocks,
+    blocksForMeasure,
     measures,
     totalHeight,
     metrics
