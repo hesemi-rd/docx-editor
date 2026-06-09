@@ -179,3 +179,4 @@ export {
 export { findStartPosForParaId } from './utils/findStartPosForParaId';
 export { findParagraphByParaId } from './utils/findParagraphByParaId';
 export { LayoutSelectionGate } from './utils/LayoutSelectionGate';
+export { ensureParaIdsInState } from './extensions/features/ParaIdAllocatorExtension';

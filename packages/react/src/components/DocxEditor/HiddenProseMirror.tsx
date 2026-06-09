@@ -29,7 +29,11 @@ import {
 import { CellSelection } from 'prosemirror-tables';
 import { EditorView, type DirectEditorProps } from 'prosemirror-view';
 import { undo, redo } from 'prosemirror-history';
-import { schema, createDocumentStylesPlugin } from '@eigenpal/docx-editor-core/prosemirror';
+import {
+  schema,
+  createDocumentStylesPlugin,
+  ensureParaIdsInState,
+} from '@eigenpal/docx-editor-core/prosemirror';
 import { toProseDoc, createEmptyDoc } from '@eigenpal/docx-editor-core/prosemirror/conversion';
 import { fromProseDoc } from '@eigenpal/docx-editor-core/prosemirror/conversion';
 import type { ExtensionManager } from '@eigenpal/docx-editor-core/prosemirror/extensions';
@@ -162,11 +166,16 @@ function createInitialState(
     styleResolverPlugin,
   ];
 
-  return EditorState.create({
-    doc,
-    schema: activeSchema,
-    plugins,
-  });
+  // Give every paragraph a paraId up front (docs without `w14:paraId` ship
+  // none), so block ids / agent scope work before the first edit — the
+  // allocator plugin's appendTransaction never fires on create (#738).
+  return ensureParaIdsInState(
+    EditorState.create({
+      doc,
+      schema: activeSchema,
+      plugins,
+    })
+  );
 }
 
 /**
