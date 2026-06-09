@@ -49,8 +49,12 @@ export function getMargins(sp: SectionProperties | null | undefined): PageMargin
     right: sp?.marginRight ? twipsToPixels(sp.marginRight) : DEFAULT_BODY_MARGIN_PX,
     bottom: sp?.marginBottom ? twipsToPixels(sp.marginBottom) : DEFAULT_BODY_MARGIN_PX,
     left: sp?.marginLeft ? twipsToPixels(sp.marginLeft) : DEFAULT_BODY_MARGIN_PX,
-    header: sp?.headerDistance ? twipsToPixels(sp.headerDistance) : DEFAULT_HF_DISTANCE_PX,
-    footer: sp?.footerDistance ? twipsToPixels(sp.footerDistance) : DEFAULT_HF_DISTANCE_PX,
+    // Nullish, not truthy: `w:header="0"` (a header pinned to the page top) is
+    // a valid explicit distance and must stay 0 — only an ABSENT distance falls
+    // back to Word's 0.5in default. A truthy test mapped 0 → 48px, over-
+    // reserving the header band and pushing content onto an extra page (#740).
+    header: sp?.headerDistance != null ? twipsToPixels(sp.headerDistance) : DEFAULT_HF_DISTANCE_PX,
+    footer: sp?.footerDistance != null ? twipsToPixels(sp.footerDistance) : DEFAULT_HF_DISTANCE_PX,
   };
 }
 
